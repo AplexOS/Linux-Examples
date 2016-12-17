@@ -1,1 +1,1 @@
-# Linux-Examples
+# Linux-Examples## Branch Namimg SpecificationJust use the software name.## i.MX6 Examples## AM335x Examples
