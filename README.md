@@ -1,1 +1,1 @@
-# Linux-Examples## Branch Namimg SpecificationJust use the software name.## i.MX6 Examples## AM335x Examples
+# Linux-Examples## Branch Namimg Specification(chip name)-(software name)-(linux version)* chip name: * i.MX6; * AM335x;* Linux version: * Linux3.0.35; * Linux3.2.0; * Linux4.4;E.g  i.MX6(chip name)-UARTTest(software name)-Linux3.0.35(linux version) = i.MX6-UARTTest-Linux3.0.35## i.MX6 Linux Examples## AM335x Linux Examples## MCU Linux Examples
