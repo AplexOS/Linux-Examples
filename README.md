@@ -1,5 +1,9 @@
-# SuperIoWatchdog-Examples
-## 1. 下载
+# SuperIoWatchdog-Examples
+
+
+## 1. 下载
+
+
 ```shell
   cd ~
   mkdir SuperIoWatchDog
@@ -23,7 +27,6 @@
     sudo ./SuperIoWatchDog  -s          （开启看门狗，并设置默认超时时间：60s）
     sudo ./SuperIoWatchDog  -f 0x10      (开启看门狗，并设置超时时间：16s)
     sudo ./SuperIoWatchDog  -p           (关闭看门狗)
-    cd aplex
 ```
 ## 4. API
 ```shell
