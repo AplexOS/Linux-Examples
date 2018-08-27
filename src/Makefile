@@ -7,5 +7,6 @@ all:
 	$(CC)  -shared     WatchDog.o  -o  libWatchDog.so
 	install -D libWatchDog.so ../lib/libWatchDog.so
 
+.PHONY:clean
 clean:
 	rm libWatchDog.a WatchDog.o libWatchDog.so -rf 

@@ -1,19 +1,30 @@
-SHELL                  :=/bin/bash
-Distributor_Id         := $(shell  lsb_release -i)
-Distributor_Type       := $(findstring Ubuntu,$(Distributor_Id))
-Distributor_Type_Strip := $(strip $(Distributor_Type))
-Libc_a                 := $(shell ls /usr/lib/libc.a)
 
-
-
-all:install_glic
+define BUILD_LIB_WatchDog
+	make -C ../src
+endef
+	
+define BUILD_APP
 	$(CC) main.c  -o SuperIoWatchDog   -L  ../lib   -lWatchDog -static
+endef
 
-install_glic:
-	@if [ "$(Distributor_Type_Strip)x" != "Ubuntux" ];then \
-		if [ "$(Libc_a)x"    != "/usr/lib/libc.ax" ];then \
-			echo "please run 'sudo yum install glibc-static' to install libc.a";\
-		fi \
-	fi
+define CHECK_LIB_C
+	@if [ ! -e /usr/lib/libc.a ];then echo "please run 'sudo yum install glibc-static' to install libc.a";fi
+endef
+
+define CHECK_LIB_WatchDog
+	@if [ ! -e ../lib/libWatchDog.a ];then $(call BUILD_LIB_WatchDog);fi
+endef
+
+all:
+ifeq ($(findstring Ubuntu,$(shell  lsb_release -i)), Ubuntu)
+	$(call CHECK_LIB_WatchDog)
+	$(call BUILD_APP)
+else
+	$(call CHECK_LIB_C)
+	$(call CHECK_LIB_WatchDog)
+	$(call BUILD_APP)
+endif
+
+.PHONY:clean
 clean:
 	rm SuperIoWatchDog -rf
