@@ -1,0 +1,30 @@
+{
+    "COM1" :
+    {
+        "port" : "/dev/ttyO1",
+        "baudrate" : 9600,
+        "timeout" : 2
+    },
+    "COM2" :
+    {
+        "port" : "/dev/ttyO2",
+        "baudrate" : 9600,
+        "timeout" : 2
+    },
+    "mqtt" :
+    {
+        "gateway_id" : "5100",
+        "device"    : 5100,
+        "wss_addr"  : "61.164.53.59",
+        "wss_port"  : 5006,
+        "username"  : "baidumap/iotmap",
+        "passwd"    : "bjBb+EUd5rwfo9fBaZUMlwG8psde+abMx35m/euTUfE=",
+        "city": "Shanghai"
+    },
+    "sensor" :
+    {
+        "timing" : 300,
+        "unit" : "s"
+    }
+}
+
