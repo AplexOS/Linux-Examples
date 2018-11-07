@@ -56,8 +56,9 @@ class dev_operation(Crc):
         return self.recvmsg
 
     def operation(self, slave_addr):
+        time.sleep(0.3)
         self.write_data_to_hw(slave_addr)
-        #time.sleep(0.2)
+        time.sleep(0.3)
         return self.read_data_from_hw()
 
     def set_dev_addr(self, slave_addr):
