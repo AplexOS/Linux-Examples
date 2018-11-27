@@ -1,0 +1,44 @@
+{
+    "serial" :
+    {
+        "COM1" :
+        {
+            "port" : "/dev/ttyO1",
+            "baudrate" : 9600,
+            "timeout" : 5
+        },
+        "COM2" :
+        {
+            "port" : "/dev/ttyO2",
+            "baudrate" : 9600,
+            "timeout" : 5
+        }
+    },
+    "network" :
+    {
+        "status" : "okay",
+        "protocol" : "tcp" ,
+        "type" : "server",
+        "target" : "192.168.4.199",
+        "port" : 9999,
+        "location" : "192.168.4.127",
+        "setting" :
+        {
+            "eth0":
+            {
+                "type" : "static",
+                "address" : "192.168.1.1",
+                "netmask" : "255.255.255.0",
+                "gateway" : "192.168.1.1"
+            }
+        }
+    },
+    "fire_wall" :
+    {
+        "status" : "disabled"
+    },
+    "mqtt" :
+    {
+        "status" : "disabled"
+    }
+}
