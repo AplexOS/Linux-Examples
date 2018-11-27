@@ -22,6 +22,7 @@
         "target" : "192.168.4.199",
         "port" : 9999,
         "location" : "192.168.4.127",
+        "timeout" : 5,
         "setting" :
         {
             "eth0":
