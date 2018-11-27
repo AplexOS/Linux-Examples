@@ -17,6 +17,10 @@ class dtu_server(threading.Thread):
 
     def run(self):
         self.client_socket, self.addr = dtu_dev.socket.accept()
+
+        dtu_dev.socket.setblocking(True)
+        dtu_dev.socket.settimeout(5)
+
         print(self.addr)
         print("new clinet start")
 
@@ -37,23 +41,24 @@ class dtu_server_run(threading.Thread):
 
     def socket_recv(self):
         while True :
-            if (not dtu_dev.network_recv_queue.full()) :
+            try :
                 msg = self.client_socket.recv(1024)
                 print(msg)
-                dtu_dev.network_recv_queue.put(msg)
                 print("test socket recv msg")
-                #time.sleep(3)
+            except :
+                print("recv socket data error or timeout")
             else :
-                time.sleep(3)
+                if (not dtu_dev.network_recv_queue.full()) :
+                    dtu_dev.network_recv_queue.put(msg)
 
     def socket_send(self):
         while True :
-            if (not dtu_dev.network_send_queue.empty()) :
-                self.client_socket.send(dtu_dev.network_send_queue.get())
+            try :
+                msg = dtu_dev.network_send_queue.get(timeout=5)
+                self.client_socket.send(msg)
                 print("test socket send msg")
-                #time.sleep(3)
-            else :
-                time.sleep(3)
+            except :
+                print("socket send msg fail or queue timeout")
 
     def run(self):
         while True :

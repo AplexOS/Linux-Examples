@@ -45,7 +45,6 @@ class dtu_device():
             elif dtu_config.config_data["network"]["type"] == "server" :
                 cls.socket.bind((cls.localtion, cls.port))
                 cls.socket.listen(cls.max_listen)
-                #cls.client_socket, cls.addr = cls.socket.accept()
 
             cls.network_recv_queue = queue.Queue(maxsize = 2048)
             cls.network_send_queue = queue.Queue(maxsize = 2048)

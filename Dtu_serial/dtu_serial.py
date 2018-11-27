@@ -18,19 +18,21 @@ class dtu_serial(threading.Thread) :
 
     def msg_put_to_serial(self):
         while True :
-            if(dtu_dev.network_recv_queue.empty()) :
-                time.sleep(3)
-            else :
-                msg = dtu_dev.network_recv_queue.get()
+            try :
+                msg = dtu_dev.network_recv_queue.get(timeout=5)
                 self.serial_com.write(msg)
                 print("test serial write msg")
-                #time.sleep(3)
+            except :
+                print("serial write fial or queue timeout")
 
     def msg_get_from_serial(self):
         while True :
-            msg = self.serial_com.read(128)
-            print("serial read len : %d" % len(msg))
-            dtu_dev.network_send_queue.put(msg)
+            try :
+                msg = self.serial_com.read(128)
+                print("serial read len : %d" % len(msg))
+                dtu_dev.network_send_queue.put(msg)
+            except :
+                print("serial read fail")
 
     def run(self):
         if (self.flag) :
