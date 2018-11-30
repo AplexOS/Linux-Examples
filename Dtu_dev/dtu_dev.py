@@ -5,6 +5,7 @@ import json
 import sys
 import queue
 import socket
+import threading
 
 sys.path.append("../")
 
@@ -39,7 +40,6 @@ class dtu_device():
             cls.localtion = dtu_config.config_data["network"]["location"]
             cls.max_listen = 5
 
-
             if dtu_config.config_data["network"]["type"] == "client" :
                 cls.socket.connect((cls.target, cls.port))
             elif dtu_config.config_data["network"]["type"] == "server" :
@@ -48,6 +48,9 @@ class dtu_device():
 
             cls.network_recv_queue = queue.Queue(maxsize = 2048)
             cls.network_send_queue = queue.Queue(maxsize = 2048)
+
+            cls.network_alive = threading.Event()
+            cls.network_alive.clear()
 
         return cls._inst
 

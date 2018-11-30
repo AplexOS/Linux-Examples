@@ -16,21 +16,27 @@ class dtu_server(threading.Thread):
         self.name = name
 
     def run(self):
-        self.client_socket, self.addr = dtu_dev.socket.accept()
+        while True :
+            dtu_dev.network_alive.clear()
+            self.client_socket, self.addr = dtu_dev.socket.accept()
 
-        self.client_socket.setblocking(True)
-        self.client_socket.settimeout(dtu_config.config_data["network"]["timeout"])
+            self.client_socket.setblocking(True)
+            self.client_socket.settimeout(dtu_config.config_data["network"]["timeout"])
 
-        print(self.addr)
-        print("new clinet start")
+            self.dtu_server_recv = dtu_server_run("server_recv", \
+                    self.client_socket, 1)
+            self.dtu_server_send = dtu_server_run("server_send", \
+                    self.client_socket, 0)
 
-        self.dtu_server_recv = dtu_server_run("server_recv", self.client_socket, 1)
-        self.dtu_server_send = dtu_server_run("server_send", self.client_socket, 0)
+            self.dtu_server_recv.start()
+            self.dtu_server_send.start()
 
-        self.dtu_server_recv.start()
-        self.dtu_server_send.start()
+            self.dtu_server_recv.join()
+            self.dtu_server_send.join()
 
-        self.dtu_server_recv.join()
+            self.client_socket.close()
+            time.sleep(2)
+
 
 class dtu_server_run(threading.Thread):
     def __init__(self, name, client_socket, flag):
@@ -41,34 +47,44 @@ class dtu_server_run(threading.Thread):
 
     def socket_recv(self):
         while True :
+            if dtu_dev.network_alive.is_set() :
+                break
+
             try :
                 msg = self.client_socket.recv(256)
-                #print(msg)
-                #print("test socket recv msg")
-            except :
-                pass
-                #print("recv socket data error or timeout")
+            except socket.gaierror:
+                print("clinet recv gaierror")
+            except socket.timeout:
+                msg = None
+                continue
+            except OSError :
+                print("client recv OSError and exit")
             else :
                 if (not dtu_dev.network_recv_queue.full()) :
                     dtu_dev.network_recv_queue.put(msg)
 
     def socket_send(self):
         while True :
+            if dtu_dev.network_alive.is_set() :
+                break
+
             try :
                 msg = dtu_dev.network_send_queue.get(\
                         timeout = dtu_config.config_data["network"]["timeout"])
-                self.client_socket.send(msg)
-                #print("test socket send msg")
             except :
-                #print("socket send msg fail or queue timeout")
-                pass
+                continue
+
+            try :
+                self.client_socket.send(msg)
+            except :
+                print("socket send timeout")
+                break
 
     def run(self):
-        while True :
-            if (self.flag == 1) :
-                self.socket_recv()
-            elif (self.flag == 0):
-                self.socket_send()
+        if (self.flag == 1) :
+            self.socket_recv()
+        elif (self.flag == 0):
+            self.socket_send()
 
 class dtu_client(threading.Thread):
     def __init__(self, name, flag):
@@ -105,7 +121,6 @@ class dtu_client(threading.Thread):
         elif (self.flag == 0):
             self.socket_send()
 
-        self.socket.close()
 
 class dtu_network(threading.Thread):
     def __init__(self, name):
@@ -127,5 +142,6 @@ class dtu_network(threading.Thread):
             dtu_network_client_send_msg.start()
             dtu_network_client_recv_msg.start()
 
+            dtu_network_client_send_msg.join()
             dtu_network_client_recv_msg.join()
 

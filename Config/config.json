@@ -23,6 +23,7 @@
         "port" : 9999,
         "location" : "192.168.4.127",
         "timeout" : 5,
+        "max_listen" : 5,
         "setting" :
         {
             "eth0":
