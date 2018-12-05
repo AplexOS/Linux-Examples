@@ -5,13 +5,13 @@
         {
             "port" : "/dev/ttyO1",
             "baudrate" : 9600,
-            "timeout" : 5
+            "timeout" : 1
         },
         "COM2" :
         {
             "port" : "/dev/ttyO2",
             "baudrate" : 9600,
-            "timeout" : 5
+            "timeout" : 1
         }
     },
     "network" :
@@ -21,8 +21,8 @@
         "type" : "server",
         "target" : "192.168.4.199",
         "port" : 9999,
-        "location" : "192.168.4.127",
-        "timeout" : 5,
+        "location" : "192.168.4.200",
+        "timeout" : 1,
         "max_listen" : 5,
         "setting" :
         {

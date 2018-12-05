@@ -31,7 +31,8 @@ class dtu_serial(threading.Thread) :
             try :
                 msg = self.serial_com.read(256)
                 #print("serial read len : %d" % len(msg))
-                dtu_dev.network_send_queue.put(msg)
+                if (len(msg) > 0):
+                    dtu_dev.network_send_queue.put(msg)
             except :
                 pass
 
