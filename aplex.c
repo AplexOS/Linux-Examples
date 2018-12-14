@@ -1,4 +1,4 @@
-#include "demo.h"
+#include "aplex.h"
 #include "iota_device.h"
 #include "hw_json.h"
 #include "stdio.h"
@@ -11,17 +11,22 @@ HW_UINT g_uiLoginFlg = HW_FALSE;
 HW_UINT g_uiLogLevel = 0;
 HW_UINT g_uiCookie= 1;
 HW_CHAR *g_cDeviceId = HW_NULL;
+
+HW_INT Device_ImitateDate_test( HW_CHAR **pcJsonStr);
+HW_VOID Add_subdevice(char *device_info_file_path);
+
+HW_INT Device_DataReportResultHandler(HW_UINT uiCookie, HW_MSG pstMsg);
+
 HW_INT main()
 {
     HW_CHAR acBuf[BUFF_MAX_LEN];
-	// 初始化
+    // 初始化
     IOTA_Init(CONFIG_PATH, HW_NULL);
     HW_LOG_INF("IOTA_Init");
     DEVICE_InitGateWayInfo();
     DEVICE_ReadConf();
     if (HW_NULL == g_stGateWayInfo.pcDeviceID)
     {
-		// true
         while(1)
         {
             if(HW_OK == DEVICE_BindGateWay())
@@ -36,7 +41,6 @@ HW_INT main()
     }
     else
     {
-		// 设置登陆参数
         IOTA_ConfigSetStr(EN_IOTA_CFG_DEVICEID, g_stGateWayInfo.pcDeviceID);
         IOTA_ConfigSetStr(EN_IOTA_CFG_IOCM_ADDR, g_stGateWayInfo.pcIOCMAddr);
         IOTA_ConfigSetStr(EN_IOTA_CFG_APPID, g_stGateWayInfo.pcAppID);
@@ -61,6 +65,7 @@ HW_INT main()
     HW_BroadCastReg(IOTA_TOPIC_HUB_ADDDEV_RSP, Device_AddResultHandler);
     HW_BroadCastReg(IOTA_TOPIC_HUB_RMVDEV_RSP, Device_RemovResultHandler);
     HW_BroadCastReg(IOTA_TOPIC_DEVUPDATE_RSP, Device_DevUpDateHandler);
+
 
 
 
@@ -240,8 +245,6 @@ HW_UINT DEVICE_BindGateWay()
     HW_CHAR *pucEsnFile;
     HW_CHAR *pucPlatformAddr;
 
-    //get gw reg info
-			// D:/AgentLite/gwreginfo.json
     sprintf(szGwRegInfoFileName, "%s/%s", CONFIG_PATH, GATEWAY_REG_INFO_FILE);
     fp = fopen(szGwRegInfoFileName, "r");
     if (HW_NULL == fp)
@@ -319,7 +322,7 @@ HW_UINT DEVICE_BindGateWay()
 
     stDeviceInfo.pcMac = szEsnInfo;
     stDeviceInfo.pcNodeId = szEsnInfo;
-	// IOT 绑定参数
+    // IOT 绑定参数
     IOTA_ConfigSetStr(EN_IOTA_CFG_IOCM_ADDR, pucPlatformAddr);  // 绑定 IP
     IOTA_ConfigSetUint(EN_IOTA_CFG_IOCM_PORT, uiPort);       // 绑定端口
     IOTA_Bind(stDeviceInfo.pcMac, &stDeviceInfo);			// 绑定
@@ -420,22 +423,44 @@ HW_INT Device_ConnectedHandler(HW_UINT uiCookie, HW_MSG pstMsg)
     HW_CHAR *pcJsonStr;
 
     HW_LOG_INF(" --OnConnected--!");
+    HW_BroadCastReg("IOTA_TOPIC_SERVICE_REPORT_RET", Device_DataReportResultHandler);
+
+    HW_Sleep(5);
+
+	HW_JSON json;
+	HW_JSONOBJ hJsonObj;
+
+	hJsonObj = HW_JsonObjCreate();
+	json = HW_JsonGetJson(hJsonObj);
+	HW_JsonAddUint(json, (HW_CHAR*)"temperature", (HW_INT)25);
+	HW_JsonAddUint(json, (HW_CHAR*)"humidity", (HW_INT)20);
+	HW_JsonAddUint(json, (HW_CHAR*)"illumination", (HW_INT)25);
+	HW_JsonAddUint(json, (HW_CHAR*)"co2", (HW_INT)25);
+	HW_JsonAddUint(json, (HW_CHAR*)"soil_humidity", (HW_INT)25);
+	HW_JsonAddUint(json, (HW_CHAR*)"hydraulic", (HW_INT)25);
+	HW_JsonAddUint(json, (HW_CHAR*)"rainfall", (HW_INT)25);
+	pcJsonStr = HW_JsonEncodeStr(hJsonObj);
 
     g_uiLoginFlg = HW_TRUE;
     pcDeviceId = HW_MsgGetStr(pstMsg, EN_IOTA_BIND_IE_DEVICEID);
-    Device_ImitateDate(&pcJsonStr);
-    Device_ServiceDataReport(pcDeviceId,pcJsonStr);
 
-    HW_Sleep(5);
-    AddSensors();
+    //Device_ImitateDate(&pcJsonStr, "temperature", 25);
+    Device_ServiceDataReport(g_stGateWayInfo.pcDeviceID, pcJsonStr, "Aplex_Gateway");
+
+    //Device_ImitateDate(&pcJsonStr, "humidity", 25);
+    //Device_ServiceDataReport(pcDeviceId, pcJsonStr, "Aplex_Gateway");
+
+
+    // Add subdevice
+    //Add_subdevice("temperature.json");
+    //Add_subdevice("humidity.json");
     g_uiCookie ++;
     return HW_OK;
-
 }
 
 
 
-HW_VOID AddSensors()
+HW_VOID Add_subdevice(char *device_info_file_path)
 {
     ST_IOTA_DEVICE_INFO  stDeviceInfo = {0};
     FILE *fp = NULL;
@@ -446,7 +471,7 @@ HW_VOID AddSensors()
     HW_JSON json;
 
     //get gw device info
-    sprintf(szdeviceInfoFileName, "%s/%s", CONFIG_PATH, DEVICE_INFO_FILE);
+    sprintf(szdeviceInfoFileName, "%s/%s", CONFIG_PATH, device_info_file_path);
     fp = fopen(szdeviceInfoFileName, "r");
     if (HW_NULL == fp)
     {
@@ -521,8 +546,11 @@ HW_INT Device_AddResultHandler(HW_UINT uiCookie, HW_MSG pstMsg)
     IOTA_DeviceStatusUpdate(g_uiCookie, g_cDeviceId, "ONLINE", "NONE");
 
     HW_Sleep(5);
-    Device_ImitateDate(&pcJsonStr);
-    Device_ServiceDataReport(g_cDeviceId,pcJsonStr);
+    //Device_ImitateDate(&pcJsonStr, "temperature");
+    //Device_ServiceDataReport(g_cDeviceId, pcJsonStr, "Temp");
+
+    //Device_ImitateDate_test(&pcJsonStr);
+    //Device_ServiceDataReport(g_cDeviceId, pcJsonStr, "Humi");
 
     HW_Sleep(10);
     //if(HW_NULL != g_cDeviceId)
@@ -531,17 +559,27 @@ HW_INT Device_AddResultHandler(HW_UINT uiCookie, HW_MSG pstMsg)
     return HW_OK;
 }
 
-HW_INT Device_ImitateDate( HW_CHAR **pcJsonStr)
+HW_INT Device_ImitateDate( HW_CHAR **pcJsonStr, char *json_key, unsigned int json_data)
 {
     HW_JSON json;
     HW_JSONOBJ hJsonObj;
 
     hJsonObj = HW_JsonObjCreate();
     json = HW_JsonGetJson(hJsonObj);
-    //HW_JsonAddUint(json, (HW_CHAR*)"batteryLevel", (HW_INT)3);
-	//HW_JsonAddStr(json, (HW_CHAR*)"BatteryCur", (HW_CHAR*)"HIGH");
-	//HW_JsonAddStr(json, (HW_CHAR*)"BatteryCur", (HW_CHAR*)"LOW");
-    HW_JsonAddUint(json, (HW_CHAR*)"Humi", (HW_INT)25);
+    HW_JsonAddUint(json, json_key, json_data);
+    *pcJsonStr = HW_JsonEncodeStr(hJsonObj);
+
+    return HW_OK;
+}
+
+HW_INT Device_ImitateDate_test( HW_CHAR **pcJsonStr)
+{
+    HW_JSON json;
+    HW_JSONOBJ hJsonObj;
+
+    hJsonObj = HW_JsonObjCreate();
+    json = HW_JsonGetJson(hJsonObj);
+    HW_JsonAddUint(json, (HW_CHAR*)"humidity", (HW_INT)28);
     *pcJsonStr = HW_JsonEncodeStr(hJsonObj);
 
     return HW_OK;
@@ -580,6 +618,25 @@ HW_INT Device_DevUpDateHandler(HW_UINT uiCookie, HW_MSG pstMsg)
     return HW_OK;
 }
 
+HW_INT Device_DataReportResultHandler(HW_UINT uiCookie, HW_MSG pstMsg)
+{
+    HW_UINT uiResult;
+    HW_CHAR *pcDeviceId;
+
+    pcDeviceId = HW_MsgGetStr(pstMsg, EN_IOTA_HUB_IE_DEVICEID);
+    uiResult = HW_MsgGetUint(pstMsg, EN_IOTA_DATATRANS_IE_RESULT, 0);
+
+    if (HW_SUCCESS != uiResult)
+    {
+        HW_LOG_ERR("Device_DataReportResultHandler  failed:uiResult=%u,DevId=%s.", uiResult, pcDeviceId);
+        // retry with uiCookie
+        return 0;
+    }
+
+    HW_LOG_INF("Device_DataReportResultHandler  DevId=%s.", pcDeviceId);
+    return 0;
+}
+
 HW_INT Device_ServiceDataReportResultHandler(HW_UINT uiCookie, HW_MSG pstMsg)
 {
     HW_UINT uiResult;
@@ -613,15 +670,15 @@ HW_INT Device_ServiceCommandReceiveHandler(HW_UINT uiCookie, HW_MSG pstMsg)
         ||(HW_NULL == pcReqId)
         ||(HW_NULL == pcServiceId)
         ||(HW_NULL == pcMethod)
-        )
+       )
     {
         HW_LOG_ERR("RcvCmd is invalid, pcDevId=%s, pcReqId=%s, pcServiceId=%s, pcMethod=%s.",
-                    pcDevId, pcReqId, pcServiceId, pcMethod);
+                   pcDevId, pcReqId, pcServiceId, pcMethod);
         return HW_ERR;
     }
 
-	HW_LOG_INF("RcvCmd is:pcDevId=%s,pcReqId=%s,pcServiceId=%s,pcMethod=%s.",
-                pcDevId, pcReqId, pcServiceId, pcMethod);
+    HW_LOG_INF("RcvCmd is:pcDevId=%s,pcReqId=%s,pcServiceId=%s,pcMethod=%s.",
+               pcDevId, pcReqId, pcServiceId, pcMethod);
     if (0 == strncmp(METHOD_REMOVE_GATEWAY,pcMethod,strlen(METHOD_REMOVE_GATEWAY)))
     {
         IOTA_RmvGateWay();
@@ -648,7 +705,7 @@ HW_VOID IOTA_RmvGateWay()
     return;
 }
 
-HW_INT Device_ServiceDataReport(HW_CHAR *pcSensorDeviceID,HW_CHAR *pcJsonStr)
+HW_INT Device_ServiceDataReport(HW_CHAR *pcSensorDeviceID,HW_CHAR *pcJsonStr, char *iota_service_id)
 {
 
     HW_CHAR aszRequestId[BUFF_MAX_LEN];
@@ -663,26 +720,18 @@ HW_INT Device_ServiceDataReport(HW_CHAR *pcSensorDeviceID,HW_CHAR *pcJsonStr)
         return HW_ERR;
     }
 
-	printf("---------------------------------------------------\n");
-	printf("aszRequestId : %s\n", aszRequestId);  // rand num
-	printf("pcSensorDeviceId : %s\n", pcSensorDeviceID); // null
-	printf("IOTA_SERVICE_ID : %s\n", IOTA_SERVICE_ID); // Battary
-	printf("pcJsonStr : %s\n", pcJsonStr); // {"BatteryCur":"HIGH"}
-	printf("---------------------------------------------------\n");
+    printf("---------------------------------------------------\n");
+    printf("aszRequestId : %s\n", aszRequestId);  // rand num
+    //printf("pcSensorDeviceId : %s\n", pcSensorDeviceID); // null
+    //printf("IOTA_SERVICE_ID : %s\n", IOTA_SERVICE_ID); // Battary
+    printf("pcJsonStr : %s\n", pcJsonStr); // {"BatteryCur":"HIGH"}
+    printf("---------------------------------------------------\n");
 
     IOTA_ServiceDataReport(HW_GeneralCookie(),
-                        aszRequestId,
-                        pcSensorDeviceID,
-                        IOTA_SERVICE_ID,
-                        pcJsonStr);
-    /*
-    IOTA_ServiceDataReport(HW_GeneralCookie(),
-                        aszRequestId,
-                        pcSensorDeviceID,
-                        "Battary",
-                        "{\"Humi\":25}");
-    */
-
+                       aszRequestId,
+                       pcSensorDeviceID,
+                       iota_service_id,
+                       pcJsonStr);
     return HW_OK;
 }
 HW_UINT HW_GeneralCookie()
@@ -707,9 +756,9 @@ HW_VOID HW_GetUUID(HW_CHAR *pcUUID)
     uiMsgSeqLow  = 0x3AC3A353;
 
     sprintf(pcUUID,"%04X%04X-%04X-%04X-%04X-%04X%04X%04X",
-                uiMsgIdHigh, uiMsgIdLow,
-                uiMsgSeqHigh++, rand(), uiMsgSeqLow++,
-                rand(), rand(), rand());
+            uiMsgIdHigh, uiMsgIdLow,
+            uiMsgSeqHigh++, rand(), uiMsgSeqLow++,
+            rand(), rand(), rand());
     return;
 }
 

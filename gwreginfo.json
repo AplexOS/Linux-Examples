@@ -2,9 +2,9 @@
 	"esnfilepath":"./esn.ini",
 	"platformaddr":"59.36.10.217",
 	"platformport":8943,
-	"manufactureid":"eSDKHuawei",
+	"manufactureid":"AplexIot",
 	"devicetype":"Gateway",
-	"model":"g002",
+	"model":"a001",
 	"protocoltype":"MQTT",
 	"loglevel":255
 }

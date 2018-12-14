@@ -27,7 +27,8 @@ extern "C" {
 #define IOTA_CFG_IODM_PORT     "IoDMPort"
 #define IOTA_CFG_MQTT_ADDR     "MQTTAddr"
 #define IOTA_CFG_MQTT_PORT     "MQTTPort"
-#define IOTA_SERVICE_ID        "Battery"
+//#define IOTA_SERVICE_ID        "Temperature"
+#define IOTA_SERVICE_ID        "Temp"
 #define IOTA_AR_ESN_INI_FILE    "esnfilepath"
 #define IOTA_PLATFORM_ADDR      "platformaddr"
 #define IOTA_PLATFORM_PORT      "platformport"
@@ -78,8 +79,8 @@ HW_INT Device_DevUpDateHandler(HW_UINT uiCookie, HW_MSG pstMsg);
 HW_VOID DEVICE_ReadConf();
 HW_UINT DEVICE_BindGateWay();
 HW_VOID IOTA_RmvGateWay();
-HW_INT Device_ImitateDate( HW_CHAR **pcJsonStr);
-HW_INT Device_ServiceDataReport(HW_CHAR *pcSensorDeviceID,HW_CHAR *pcJsonStr);
+HW_INT Device_ImitateDate( HW_CHAR **pcJsonStr, char *json_key, unsigned int json_data);
+HW_INT Device_ServiceDataReport(HW_CHAR *pcSensorDeviceID,HW_CHAR *pcJsonStr, char *iota_service_id);
 HW_VOID HW_GetUUID(HW_CHAR *pcUUID);
 HW_VOID HW_GetRequestId(HW_CHAR *pcRequestId);
 HW_UINT HW_GeneralCookie();
