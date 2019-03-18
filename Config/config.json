@@ -1,0 +1,39 @@
+{
+    "COM1" :
+    {
+        "port" : "/dev/ttyO1",
+        "baudrate" : 9600,
+        "timeout" : 0.5
+    },
+    "COM2" :
+    {
+        "port" : "/dev/ttyO2",
+        "baudrate" : 9600,
+        "timeout" : 0.5
+    },
+    "COM3" :
+    {
+        "port" : "/dev/ttyO4",
+        "baudrate" : 9600,
+        "timeout" : 1
+    },
+    "mqtt" :
+    {
+        "gateway_id" : "5100",
+        "device"    : "ARiio_5120W",
+        "wss_addr"  : "101.201.118.185",
+        "wss_port"  : 1883,
+        "username"  : "emi_box",
+        "passwd"    : "public",
+        "city": "ShenZhen"
+    },
+    "device" :
+    {
+        "id" : "5100100001001201802000002",
+        "angleThreshold" : 5,
+        "interval" : 1,
+        "intervalUser" : 30
+    },
+    "version" : "1.0.12"
+}
+
