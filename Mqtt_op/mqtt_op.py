@@ -36,6 +36,7 @@ class mqtt_operation(threading.Thread):
 
         self.is_connect_flag = 0
         self.is_start_pubmsg_flag = 0
+        self.send_version_flag = 1
 
         #self.message_queue = queue.Queue(maxsize = 2048 * 1024)
         self.sql_op = dtu_sqlite()
@@ -56,7 +57,8 @@ class mqtt_operation(threading.Thread):
                     "user_id" : "-1",
                     "land_id" : "-1",
                     "width" : 0,
-                    "farmSet" : 1,
+                    "linkType" : "-1",
+                    "farmSet" : 0,
                     "len_angle0" : -1,
                     "len_angle1" : -1,
                     "elev_angle" : -1,
@@ -95,6 +97,19 @@ class mqtt_operation(threading.Thread):
     def on_connect(self, client, userdata, flags, rc):
         try :
             client.subscribe("emi/iot/tractors/client/device/" + self.config["device"]["id"])
+        except :
+            logging.debug("subscribe error")
+        else :
+            logging.debug("subscribe ok....")
+
+        send_version_pth = threading.Thread(target=self.send_version_pthread)
+        send_version_pth.start()
+
+        over_time_pub = threading.Thread(target=self.over_time_start_publish)
+        over_time_pub.start()
+
+    def send_version_pthread(self):
+        while self.send_version_flag :
             message = {
                     "apiCode" : 61001,
                     "data" : {
@@ -107,11 +122,7 @@ class mqtt_operation(threading.Thread):
 
             message["data"]["device_id"] = self.config["device"]["id"]
             self.__mqtt__.publish(self.pub1, payload = json.dumps(message), retain = False)
-
-        except :
-            logging.debug("subscribe error")
-        else :
-            logging.debug("subscribe ok....")
+            time.sleep(10)
 
     def on_disconnect(self, client, userdata, rc):
         if rc != 0:
@@ -208,11 +219,18 @@ class mqtt_operation(threading.Thread):
             self.pub_ack_data(66001, "操作成功")
             os.system("reboot")
 
+    def over_time_start_publish(self):
+        time.sleep(30)
+        if (not self.is_start_pubmsg_flag):
+            self.send_msg_threads()
+            self.is_start_pubmsg_flag = 1
+
     def recv_sensor_time_data(self, time_data):
         if "created" in time_data:
             date_cmd = "date -s \"" + time_data["created"] + "\""
             os.system(date_cmd)
             os.system("hwclock -w")
+            self.send_version_flag = 0
 
             if (not self.is_start_pubmsg_flag):
                 self.send_msg_threads()
@@ -221,8 +239,20 @@ class mqtt_operation(threading.Thread):
             self.pub_ack_data(66002, "操作成功")
 
     def recv_sensor_width_data(self, width_data):
+        flag = 1
         if "width" in width_data:
             self.config_device["device"]["width"] = width_data["width"]
+            flag = flag & 1
+        else :
+            flag = flag & 0
+
+        if "linkType" in width_data :
+            self.config_device["device"]["linkType"] = width_data["linkType"]
+            flag = flag & 1
+        else :
+            flag = flag & 0
+
+        if flag :
             self.message["data"]["farmSet"] = 1
             self.pub_ack_data(66003, "操作成功")
 
@@ -276,12 +306,12 @@ class mqtt_operation(threading.Thread):
 
     def compile_message(self, message):
         message["data"]["device_id"] = self.config["device"]["id"]
-        message["data"]["width"] = self.config_device["device"]["width"]
         message["data"]["created"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 
         message["data"]["user_id"] = self.config_device["device"]["user_id"]
         message["data"]["land_id"] = self.config_device["device"]["land_id"]
         message["data"]["width"] = self.config_device["device"]["width"]
+        message["data"]["linkType"] = self.config_device["device"]["linkType"]
 
         incli_data0 = self.incli_data0
         incli_data1 = self.incli_data1

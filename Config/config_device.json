@@ -3,6 +3,7 @@
     {
         "width" : 0,
         "user_id" : "-1",
-        "land_id" : "-1"
+        "land_id" : "-1",
+        "linkType" : "-1"
     }
 }

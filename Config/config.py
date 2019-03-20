@@ -35,6 +35,17 @@ class configure():
             cls.config_file.close()
             cls.config_device_file.close()
 
+            serial_id = "-1"
+            eeprom_fd = open("/dev/eeprom", "rb")
+            try :
+                serial_id = eeprom_fd.read(25).decode()
+            except :
+                serial_id = "-1"
+
+            eeprom_fd.close()
+
+            cls.config["device"]["id"] = serial_id
+
         return cls._inst;
 
     def print_cfg(cls):
@@ -64,8 +75,6 @@ class configure():
             print("write config data error")
 
         os.system("sync")
-
-
 
 config = configure();
 
