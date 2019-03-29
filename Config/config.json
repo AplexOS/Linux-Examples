@@ -21,7 +21,7 @@
     {
         "gateway_id" : "5100",
         "device"    : "ARiio_5120W",
-        "wss_addr"  : "101.201.118.185",
+        "wss_addr"  : "iot.emibj.com",
         "wss_port"  : 1883,
         "username"  : "emi_box",
         "passwd"    : "public",
@@ -30,10 +30,10 @@
     "device" :
     {
         "id" : "5100100001001201802000002",
-        "angleThreshold" : 5,
+        "angleThreshold" : 10,
         "interval" : 1,
         "intervalUser" : 30
     },
-    "version" : "1.0.13"
+    "version" : "1.0.14"
 }
 
