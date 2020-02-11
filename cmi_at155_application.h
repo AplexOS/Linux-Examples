@@ -90,5 +90,6 @@ enum  eth0_flag{
 	eth0_up,
 } ;
 void show_job_number(char* job_number) ;
+void NoTask(void) ;
 
 #endif

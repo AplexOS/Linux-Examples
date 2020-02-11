@@ -54,14 +54,14 @@ static struct misc_leds _gpios[]={
          	{GPIO_TO_PIN(3,21),"DI_IN",0,0},
          	//{0,"xxx",0,0},
 			{GPIO_TO_PIN(3,17),"Relay1",0,0},
-			{GPIO_TO_PIN(3,18),"Relay2",0,0},
+			{GPIO_TO_PIN(3,18),"Relay2",1,0},
 };
 //irq handdler
 static  irqreturn_t   input_irq_handler(int  irq, void *  data)
 {
 	if(irq ==147)
 	{
-		mod_timer(&input_timer_fiter, jiffies + HZ/2) ;  //10ms fiteref
+		mod_timer(&input_timer_fiter, jiffies + HZ/4 + HZ/10) ;  //10ms fiteref
 	}
 	else{
 		return  IRQ_NONE;
@@ -72,7 +72,7 @@ static  irqreturn_t   input_irq_handler(int  irq, void *  data)
 //fiter timer handler
 static  void   input_fiter_timer_handler(unsigned long  data)
 {
-	if(gpio_get_value(_gpios[0].gpio)==0)
+	if(gpio_get_value(_gpios[0].gpio)!=0)
 	{
 			kill_fasync(&input_post_fasync,  SIGIO,  POLL_IN);
 	}
@@ -91,12 +91,14 @@ long  status_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	{
 		case  STATUS_MV1: {
 			gpio_set_value(_gpios[1].gpio,1) ;			
-			gpio_set_value(_gpios[2].gpio,0) ;			
+			//gpio_set_value(_gpios[2].gpio,0) ;		
+			gpio_set_value(_gpios[2].gpio,1) ;						
 			break;
 		}
 		case  STATUS_SPS: {
 			gpio_set_value(_gpios[1].gpio,1) ;			
-			gpio_set_value(_gpios[2].gpio,1) ;	
+			//gpio_set_value(_gpios[2].gpio,1) ;	
+			gpio_set_value(_gpios[2].gpio,0) ;	
 			break;
 		}
 		case  STATUS_SPE: {
@@ -208,7 +210,7 @@ static  int  __init   key_module_init(void)
 	_gpios[0].irq = gpio_to_irq(_gpios[0].gpio);
 	
 	ret = request_irq(_gpios[0].irq,  input_irq_handler, 
-			IRQF_SHARED  | IRQF_TRIGGER_FALLING , 
+			IRQF_SHARED  | IRQF_TRIGGER_RISING , 
 			_gpios[0].name,  (void*)&_gpios[0]); //IRQF_SHARED | IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
 	
     printk("---irq: %d %d---\n",ret, _gpios[0].irq) ;

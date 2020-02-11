@@ -4,7 +4,7 @@ FILE := module_di_post
 obj-m += $(FILE).o  
 
 KDIR      := /home/aplex/work/CMI_AT153/kernel4.4.12
-targetdir := /mnt/share/work_demo/demo/CMI_AT153/demo/project
+targetdir := /mnt/share/work_demo/CMI_AT153/demo/project
 
 #
 #   ------------------  module makefile---------------

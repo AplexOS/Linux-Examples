@@ -32,7 +32,7 @@ void    socket_client_init()
 
 	memset(&servaddr, 0, sizeof(servaddr));  
 	servaddr.sin_family = AF_INET;  
-	servaddr.sin_port = htons(DEFAULT_PORT);  
+	servaddr.sin_port = htons(8000);  
 	if(inet_pton(AF_INET, connect_ip_string, &servaddr.sin_addr) <= 0){  
 		printf("inet_pton error for %s\n",CONNECT_IP);  
 		exit(0);  

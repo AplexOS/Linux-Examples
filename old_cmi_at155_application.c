@@ -12,13 +12,12 @@
 
 static  int driver_misc_fd = 0 ;
 unsigned  long  POST_COUNT = 0 ; 
-unsigned  long  target = 10000 ; 
+unsigned  long  target = 50000 ; 
 static  char   target_flag = 0 ;
 static  int     socket_fd, connect_fd ;
-static  char    DISCONNECT_FLAG = 0 ;  //connect timeout
+static  enum    eth0_flag  eth0_connect_status = eth0_down ;
 //tcp date
 static  char    post_buf[100] = {0} ;
-static  char    receive_client_buf[100] = {0} ;
 static  char    post_id_buf[13] = "000000000001 " ;
 static  char    post_time_buf[20] = "2019-05-20 13:00:00 " ;
 static  char    post_eventcode_buf[11] = "xxxxxxxMV1 " ;
@@ -29,7 +28,7 @@ static  char    num[10] = {0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39} ;
 
 static  char    connected_flag = 0 ;
 static  int     re_login = 0 ;
-int     alarm_time = 3600 ;           //3600
+int     alarm_time = 180 ;           //3600
 static  char    systemtime[30] ;
 
 static  struct  termios termold,termnew;
@@ -44,8 +43,6 @@ enum  POST_EVENT   Temp_Event_ID = MV3 ;   //用于掉线重发的SPE SPS临时�
 
 static enum  WINDOWS_FLAG UART_WINDOWS = PASSWD_WINDOW ; 
 
-pthread_t  connect_threadfp ;
-void*  connect_thread(void* arg) ;
 void   input_DI_handler(int sig) ;  //fasync signal handler
 void   alarm_post() ;    
 void   stop_signal() ;  //CTRL + C
@@ -53,11 +50,12 @@ void   stop_signal() ;  //CTRL + C
 enum   IPSETSTATUS  IPSTATUS = NOSET ;  //设置设备ip地址
 int ftp_sockfd = 0 ; 
 
+int log_fd = 0 ;
+
 //send buf
 char send_temp[18] = {0} ;
 char send_clear_txt_buf[12] = {0xEE,0xB1,0x10,0x00,0x00,0x00,0x01,0x20,0xFF,0xFC,0xFF,0xFF} ;
 char send_passwd_buf[17]={0xEE,0xB1,0x10,0x00,0x00,0x00,0x01,0x30,0x31,0x32,0x33,0x32,0x35,0xFF,0xFC,0xFF,0xFF} ; //send buf  [7-12] 
-
 char machine_id_buf[9] = {0xEE, 0xB1, 0x00, 0x00, 0x05, 0xFF,0xFC, 0xFF, 0xFF} ; //机器码输入界面
 char enter_buf[9] = {0xEE, 0xB1, 0x00, 0x00, 0x01, 0xFF,0xFC, 0xFF, 0xFF} ;   //start to mainwindows
 char error_buf[9] = {0xEE, 0xB1, 0x00, 0x00, 0x02, 0xFF,0xFC, 0xFF, 0xFF} ;   //show  error 
@@ -84,6 +82,27 @@ static  char  ALARM_POST_FLAG = 0 ;
 static  char  KEY_POST_FLAG = 0 ;
 static  char  event_temp[5] = {0} ;
 
+static int machine_fd = 0 ;
+static void get_machineid_for_ip(void)
+{
+	int ret = 0 ;
+	char machine_id[2] = "00" ;
+
+	machine_fd = open("machine.txt", O_RDONLY) ;
+	if(machine_fd > 0)
+	{
+		ret = read(machine_fd, machine_id, 2) ;
+		set_machine_id(atoi(machine_id)) ;  //设置机器设备码 文件序号
+		close(machine_fd) ;
+		//set ipadress
+		if(set_ipadress()==1)
+		{
+			IPSTATUS = SETOK ;
+		}
+
+	}
+
+}
 static int  uart_init()
 {
 	uart_fd = open("/dev/ttyO2",O_RDWR) ;
@@ -113,10 +132,8 @@ static void getSystemTime(void)
 
 	time(&rawtime);
 	timeinfo=localtime(&rawtime);
-
 	//strftime(systemtime,30,"\n%Y-%m-%d %I:%M:%S\n",timeinfo);  //12小时制
 	strftime(systemtime,30,"\n%Y-%m-%d %H:%M:%S\n",timeinfo);  //24小时制
-
 	///strftime(systemtime,30,"\n%Y-%m-%d %I:%M:%S\n",timeinfo);
 	//strftime(systemtime,80,"\nsystemtime :\n%Y-%m-%d  %I:%M:%S\n",timeinfo);
 #ifdef   TIME_DEBUG
@@ -129,6 +146,7 @@ static void getSystemTime(void)
 	}
 #endif
 }
+
 //
 void reload_post_buf_event(void)
 {
@@ -235,13 +253,27 @@ static  void  post_entry(enum POST_EVENT post_bit, char post_flag)
 	}
 	else
 	{
-		if(event_temp[0]==0)
+		if(event_temp[0]==0)//如果发送的数据空，已经被清零 ，表示没有数据在队列里面
 		{
 			event_temp[0] = Event_ID ;
 		}
 		else
 		{	
-			event_temp[1] = Event_ID ;
+			if(event_temp[1]==0) //工作队列有一个已经缓存，但是小于两个
+			{
+				event_temp[1] = Event_ID ;
+			}
+			else  //已经缓存了两个
+			{
+				if(event_temp[2]==0) //但是 > 两个
+				{
+				 event_temp[2] = Event_ID ;
+				}
+				else
+				{
+				 event_temp[3] = Event_ID ;
+				}
+			}
 		}
 		KEY_POST_FLAG = 1 ;
 	}
@@ -251,6 +283,9 @@ static  void  post_entry(enum POST_EVENT post_bit, char post_flag)
 static void  hmi_cmd_date_entry(char* pbuf)
 {
 	int ret = 0 ;
+
+	if(eth0_connect_status == eth0_down)
+		return ;
 
 	delay_for_palse_flag = 1 ;  /////////临时加的  之前SPS  MV3没有 按键按下标志位
 
@@ -262,7 +297,7 @@ static void  hmi_cmd_date_entry(char* pbuf)
 			ret = write(uart_fd,send_start_status,sizeof(send_start_status)) ;
 			POST_COUNT = 0 ;
 			target_flag = 0 ;
-			ioctl(driver_misc_fd,STATUS_MV1,0) ;  //1,0
+			//ioctl(driver_misc_fd,STATUS_MV1,0) ;  //1,0
 			post_entry(MV1, 2) ;
 		}
 	}
@@ -273,7 +308,7 @@ static void  hmi_cmd_date_entry(char* pbuf)
 		{
 			alarm(alarm_time) ; //重新设置时间 避免此时正在报工
 			ret = write(uart_fd,send_palse_status,sizeof(send_palse_status)) ;
-			ioctl(driver_misc_fd,STATUS_SPS,0) ;  //1,0
+			//ioctl(driver_misc_fd,STATUS_SPS,0) ;  //1,0
 			post_entry(SPS, 2) ;
 		
 		}
@@ -285,18 +320,21 @@ static void  hmi_cmd_date_entry(char* pbuf)
 		{
 			alarm(10) ;
 			ret = write(uart_fd,send_stop_palse_status,sizeof(send_palse_status)) ;
-			ioctl(driver_misc_fd,STATUS_SPE,0) ;  //1,0
+			//ioctl(driver_misc_fd,STATUS_SPE,0) ;  //1,0
 			post_entry(SPE, 2) ;
 		
 		}
 	}
 	else if(pbuf[0]==0xbe) //结束 
 	{   
+		if((Event_ID == MV3)||(Event_ID == SPS))//已经暂停，必须先暂停结束 才可以结束
+			return ;
+	
 		alarm(alarm_time) ;//重新设置时间 避免此时正在报工
 		if(POST_COUNT>=target) //已经达到目标
 		{
 			ret = write(uart_fd,send_stop_status,sizeof(send_stop_status)) ;
-			ioctl(driver_misc_fd,STATUS_MV3,0) ;  //1,0
+			//ioctl(driver_misc_fd,STATUS_MV3,0) ;  //1,0
 			post_entry(MV3, 2) ;
 		}
 		else  
@@ -307,10 +345,12 @@ static void  hmi_cmd_date_entry(char* pbuf)
 	}
 	else if(pbuf[0]==0xb5) //没有到达目标确认结束 
 	{
+		if((Event_ID == MV3)||(Event_ID == SPS))//已经暂停，必须先暂停结束 才可以结束
+			return ;
 		alarm(alarm_time) ;//重新设置时间 避免此时正在报工
 		ret = write(uart_fd,enter_buf,sizeof(enter_buf)) ; //返回主页面
 		ret = write(uart_fd,send_stop_status,sizeof(send_stop_status)) ; //show end
-		ioctl(driver_misc_fd,STATUS_MV3,0) ;  //1,0
+		//ioctl(driver_misc_fd,STATUS_MV3,0) ;  //1,0
 		post_entry(MV3, 2) ;
 	}
 	else
@@ -341,69 +381,6 @@ static int get_length_of_buf (const char *string)
 		++cptr;
 	return cptr - string; //cptr表示指向字符串的\0字符的位置，string表示指向字符串的第一个字符的位置，所以两者相减就是字符串的长度
 }
-//tcp cmd entry
-static void  tcp_cmd_date_entry(char* pbuf)
-{
-	char time_temp[21]={0x00} ;
-
-	static char cmd_start[5]={'d','a','t','e'} ;
-	char cmd[16] = {' '} ;
-
-	int i = 0 ,len = 0;
-	char*  rev_date;
-    
-	rev_date = pbuf ;
-    len = get_length_of_buf(rev_date) ;
-
-	printf("--------rev_date is %d-------------\n",len) ;
-	printf("id:         13\n") ;
-	for(i=0;i<13;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\ntime:       20\n") ;
-	for(i=13;i<33;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\nevencode:   11\n") ;
-	for(i=33;i<44;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\npost_code   31:\n") ;
-	for(i=44;i<75;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\nQty:        15\n") ;
-	for(i=75;i<90;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\nerror:      8\n") ;
-	for(i=90;i<len;i++)
-			printf("%c",rev_date[i]) ;
-	printf("\n--------------------------------\n") ;
-	//
-	if(len == 98){
-        printf("---paramer will be reset---\n") ;
-	}else{
-		printf("receive ierror ! please re inter\n") ;
-	    return ;
-	}
-
-	//set alarm time from client date
-	alarm_time = atoi(&rev_date[90]) ;
-    
-	memcpy(time_temp,&rev_date[13],20) ;
-	printf("--%s--\n",time_temp) ;
-    //run system cmd	
-	memset(cmd,' ',sizeof(cmd)) ;
-	memcpy(cmd,cmd_start,5) ;
-	memcpy(&cmd[5],&rev_date[13],10) ;
-	cmd[15] = '\n' ;
-	system(cmd) ;   //run system cmd  set date
-
-
-	memset(cmd,' ',sizeof(cmd)) ;
-	memcpy(cmd,cmd_start,5) ;
-	memcpy(&cmd[5],&rev_date[23],8) ;
-	cmd[13] = '\n' ;
-	system(cmd) ;   //run system cmd  set date
-	
-
-}
 //signal init
 static int signal_init(void)  
 {
@@ -429,12 +406,34 @@ static int signal_init(void)
 
     return 0 ;
 }
+void beep_ctl(void)
+{
+	int ret = 0 ;
+	int i = 0 ,t = 0;
+	char beep_buf[7] = {0xEE, 0x61, 0x62, 0xFF,0xFC, 0xFF, 0xFF} ;  
 
+	ret = write(uart_fd, beep_buf, sizeof(beep_buf)) ; 
+}
+void auto_finish(void)
+{
+	int ret = 0 ;
+	char cmd_buf[10]={0} ;
+
+	cmd_buf[0] = 0xb5 ; //stop
+	hmi_cmd_date_entry(cmd_buf) ;
+	sleep(5) ;
+
+	cmd_buf[0] = 0xbc ; //start
+	hmi_cmd_date_entry(cmd_buf) ;
+}
 int main(int argc, char** argv)  
 {  
     int ret  = 0;  
 	struct sockaddr_in     servaddr;  
     unsigned int  socket_stop = 1 ;	
+	int skfd = 0;
+	char eth0_status[2] = {0} ;  int eth0_ret = 0 ;
+    char eth0_error = 0  ;
 
 	pid_t  pid = 0 ;
 	//创建子进程 用于调整时间
@@ -447,7 +446,7 @@ int main(int argc, char** argv)
 			getSystemTime() ;
 			if(systemtime[3]=='0') //2019
 			{
-				system("ntpdate  192.168.2.1") ;
+				system("ntpdate  192.168.2.100") ;
 				time_check_flag = 1 ;
 				sleep(2) ;
 			}
@@ -455,11 +454,12 @@ int main(int argc, char** argv)
 			{
 				if(time_check_flag==0)
 				{
-					system("ntpdate  192.168.2.1") ;
+					system("ntpdate  192.168.2.100") ;
 					sleep(2) ;
 				}
 				printf("\n---time has check finish---\n") ;
 				exit(0) ;
+				
 			}
 		}
 	}
@@ -469,88 +469,156 @@ int main(int argc, char** argv)
 	passwd_open() ;
 	saved_password = passwd_read() ;
 	printf("password: %s\n",saved_password) ;
-    //init & open uart
-	uart_init() ;
-	ret = write(uart_fd,start_UI_buf,sizeof(start_UI_buf)) ;             //reset start MainWindows
-	ret = write(uart_fd,send_clear_txt_buf,sizeof(send_clear_txt_buf)) ; //clear txt
-
+    //如果还没有获取到 则需要马上开启串口获取  
+    get_machineid_for_ip() ;  //get ip
+	if(machine_fd < 0)
+	{
+		uart_init() ;
+		ret = write(uart_fd,start_UI_buf,sizeof(start_UI_buf)) ;             //reset start MainWindows
+		ret = write(uart_fd,send_clear_txt_buf,sizeof(send_clear_txt_buf)) ; //clear txt
+	}
 	//open input misc
 	if(signal_init()<0){
 		return -1 ;
 	}
+	//启动 直接关闭报警设备
+	ioctl(driver_misc_fd, DISCONNECT, 0) ; //off 
+    ioctl(driver_misc_fd, BEEP_ON, 0) ;  
+	ioctl(driver_misc_fd, STATUS_MV1,0) ;  //关闭报警
     /*
 	 *  先获取到IP地址
 	 */
 	while(IPSTATUS ==  NOSET){
 		sleep(1) ;
 	}
-	sleep(10) ;
+	sleep(15) ;  //10
+
 	alarm(10) ;  ///////////////////
 	system("sync") ;
-	SystemPowerOn_ParemerRead() ;  
-	ftp_sockfd = login() ;
-	if(ftp_sockfd){
-		//sleep(1) ;
-		printf("\n===login finish===\n") ;
-		IPSTATUS = SETFINISH ;
-	}
-	//IPSTATUS = SETFINISH ; 
 
+	skfd = open("/sys/class/net/eth0/carrier", O_RDONLY) ;
+	if(skfd < 0)
+		printf("cat eth0 error!\n") ;
+    else  
+		printf("cat eth0 success!\n") ;
+
+	do
+	{
+		//ftp_sockfd = login() ;
+		if(!ftp_sockfd)
+			ftp_sockfd = mount_login() ;
+		else
+			ftp_sockfd = remount_login() ;
+
+		printf("==ready to login %d==\n", ftp_sockfd) ;
+
+		if(!ftp_sockfd)
+		{
+			printf("\n===login finish %d===\n") ;
+		}
+		else
+		{
+			lseek(skfd, 0, SEEK_SET) ;
+			memset(eth0_status, '0' , 2) ;
+			eth0_ret = read(skfd, eth0_status, 2) ;
+			if(eth0_status[0] == '0') //如果是网线断了导致登录失败 则报警  否则继续登录 
+			{
+				for(char i=0;i<6;i++)
+				{
+					ioctl(driver_misc_fd, ON_CONNECT, 0) ; beep_ctl() ; 
+					sleep(1) ;
+					ioctl(driver_misc_fd, DISCONNECT, 0) ; beep_ctl() ; 
+					sleep(1) ;
+					printf("---eth0 has down please check right now---\n") ;
+				}
+
+			}
+
+		}
+		sleep(1) ;
+	}while(ftp_sockfd>0); //直到挂载成功
+
+	IPSTATUS = SETFINISH ;
+
+	if(machine_fd > 0 )
+	{
+		uart_init() ;
+		ret = write(uart_fd,start_UI_buf,sizeof(start_UI_buf)) ;             //reset start MainWindows
+		ret = write(uart_fd,send_clear_txt_buf,sizeof(send_clear_txt_buf)) ; //clear txt
+	}
 	while(1){
 		if(target_flag == 0)
 		{
 			if(POST_COUNT>=target)
 			{
-				for(char i=0;i<3;i++)
+				for(char i=0;i<6;i++)
 				{
-					ioctl(driver_misc_fd, BEEP_ON, 0) ;  
-					sleep(2) ;
-					ioctl(driver_misc_fd, BEEP_OFF, 0) ;  
-					sleep(2) ;
+					ioctl(driver_misc_fd,STATUS_SPS,0) ;  //1,0
+					//	ioctl(driver_misc_fd, BEEP_OFF, 0) ;  
+					sleep(5) ;
+					//	ioctl(driver_misc_fd, BEEP_ON, 0) ;  
+					ioctl(driver_misc_fd,STATUS_MV1,0) ;  //1,0
+					sleep(1) ;
 				}
 				target_flag = 1 ;
 			}
 		}
-		
-		sleep(5) ;
-		if(DISCONNECT_FLAG > 10)  //连续10此发送失败 认为断网
+		else if(target_flag == 1)
 		{
+			if(POST_COUNT>=(target + target/100))
+			{
+				auto_finish() ;
+			}
+			
+		}
+		
+		usleep(100000) ;
+		//检查网线是否拔出
+		lseek(skfd, 0, SEEK_SET) ;
+		memset(eth0_status, '0' , 2) ;
+        eth0_ret = read(skfd, eth0_status, 2) ;
+		//printf("---status eth0 %c---\n", eth0_status[0]) ;
+		if(eth0_status[0] == '0')  
+		{
+			eth0_connect_status = eth0_down ;
+			eth0_error = 1 ;
 				for(char i=0;i<6;i++)
 				{
-					ioctl(driver_misc_fd, DISCONNECT, 0) ;  
+					ioctl(driver_misc_fd, ON_CONNECT, 0) ; beep_ctl() ; 
 					sleep(1) ;
-					ioctl(driver_misc_fd, ON_CONNECT, 0) ;  
+					ioctl(driver_misc_fd, DISCONNECT, 0) ; beep_ctl() ; 
 					sleep(1) ;
+					printf("---eth0 has down please check right now---\n") ;
 				}
 		
 		}
-	}    
+		else
+		{
+			if(eth0_error == 1)
+			{
+				for(char t=0;t<10;t++)  //2.5min
+				{
+					sleep(5) ;
+					printf("---wait  30s for socket---\n") ;
+				}
+				eth0_error = 0 ;
 
+				event_temp[0] = 0 ; event_temp[1] = 0 ; KEY_POST_FLAG = 0 ; ALARM_POST_FLAG = 0 ; 
+				//
+				//system("reboot") ;
+
+			}
+			if(eth0_connect_status == eth0_down)
+				eth0_connect_status = eth0_up ; 
+		}
+
+	}
 	close(connect_fd);
 	close(socket_fd); 
 	close(driver_misc_fd) ;
 	close(uart_fd) ;
 	return 0 ;
 }  
-//thread 
-void*  connect_thread(void* arg) 
-{
-	char*    buff;   
-	int     n; 
-
-	while(1){
-	
-	n = recv(connect_fd, buff, MAXLINE, 0);  //receive date  
-
-    if(n>0){
-	  buff[n] = '\0';  
-	  /////////printf("\nclient send date :\n%s\n", buff);
-      tcp_cmd_date_entry(buff) ;
-	}
-
-	}
-	printf("--thread close now--\n") ;
-}
 //
 void*  send_post_thread(void* arg) 
 {
@@ -577,46 +645,63 @@ void*  send_post_thread(void* arg)
 	{	
 		if(KEY_POST_FLAG == 1)
 		{
-
 			Event_ID = event_temp[0] ; 
 			reload_post_buf_event() ;
-
-			ret = postDatesToService(ftp_sockfd, "post_ftp", post_buf, re_login) ;  //
+			ret = postDatesToService(ftp_sockfd, "post_ftp", post_buf, re_login, KEY_POST_FLAG) ;  //
 			re_login = 0 ;
 			if(ret == -3)
 			{
 				printf("key send error\n") ;
-				ftp_sockfd = login() ;
+				//ftp_sockfd = login() ;
+				ftp_sockfd = remount_login() ;
 				re_login = 1 ;
 
-				DISCONNECT_FLAG++ ;
-				
 			}
 			else
 			{
 				if(event_temp[1]!=0)
 				{
-					event_temp[0] = event_temp[1] ; //
-					event_temp[1] = 0 ; //准备发送缓存的数据
+					if(event_temp[2]!=0)
+					{
+						if(event_temp[3]!=0)
+						{
+							event_temp[0] = event_temp[1] ; //准备发送1
+							event_temp[1] = event_temp[2] ; //event_temp[2]-->event_temp[1]
+							event_temp[2] = event_temp[3] ; 
+							event_temp[3] = 0 ;  //清零event_temp[3]
+
+						}
+						else
+						{
+							event_temp[0] = event_temp[1] ; //准备发送1
+							event_temp[1] = event_temp[2] ; //event_temp[2]-->event_temp[1]
+							event_temp[2] = 0 ;  //清零event_temp[2]
+						}
+					}
+					else
+					{
+						event_temp[0] = event_temp[1] ; //
+						event_temp[1] = 0 ; //准备发送缓存的数据
+					}
 				}
 				else
 				{
-					KEY_POST_FLAG = 0 ;
-					event_temp[0] = 0 ; //clear
+					KEY_POST_FLAG = 0 ; //按键标志也要清零
+					event_temp[0] = 0 ; //clear 发送完成所有的 清零
 				}
-				DISCONNECT_FLAG = 0 ; ;
 			}
 
 		}
 		else if(ALARM_POST_FLAG == 1)
 		{
 			ALARM_POST_FLAG = 0 ;
-			ret = postDatesToService(ftp_sockfd, "post_ftp", post_buf, re_login) ;  //
+			ret = postDatesToService(ftp_sockfd, "post_ftp", post_buf, re_login, KEY_POST_FLAG) ;  //
 			re_login = 0 ;
 			if(ret == -3)
 			{
 				printf("alarm send error\n") ;
-				ftp_sockfd = login() ;
+				//ftp_sockfd = login() ;
+				ftp_sockfd = remount_login() ;
 				re_login = 1 ;
 				alarm(3) ;  //5
 				if(delay_for_palse_flag==1)
@@ -624,17 +709,14 @@ void*  send_post_thread(void* arg)
 					delay_for_palse_flag = 2 ;
 					Temp_Event_ID = Event_ID ;
 				}
-				DISCONNECT_FLAG++ ;
 			}
-			else
-			{
-				DISCONNECT_FLAG = 0 ; 
 
-			}
 		}
+		usleep(10000) ;
 
 	}
 }
+
 //get inpput
 void input_DI_handler(int sig) 
 {
@@ -646,7 +728,9 @@ void input_DI_handler(int sig)
 	{
 		POST_COUNT++;
 		printf("--  %d --\n",POST_COUNT) ;
+		//show_log();
 	}
+
 }  
 
 //alarm
@@ -703,6 +787,7 @@ void  stop_signal()
 	close(socket_fd); 
 	close(driver_misc_fd) ;
 	close(uart_fd) ;
+	close(log_fd) ;
    
 	exit(0) ;
 }
@@ -714,22 +799,6 @@ void SystemRestarRecovery(void) ;
 void*  uart_thread(void* arg) 
 {
 	int ret = 0 ;
-	int machine_fd = 0 ;
-	char machine_id[2] = "00" ;
-
-	machine_fd = open("machine.txt", O_RDONLY) ;
-	if(machine_fd > 0)
-	{
-		ret = read(machine_fd, machine_id, 2) ;
-		set_machine_id(atoi(machine_id)) ;  //设置机器设备码 文件序号
-		close(machine_fd) ;
-		//set ipadress
-		if(set_ipadress()==1)
-		{
-			IPSTATUS = SETOK ;
-		}
-
-	}
     
 	while(1)
 	{
@@ -975,14 +1044,17 @@ void  passwd_check(char*  pdate)
 		}
 	}
 }
-
+//显示工单号
 void show_job_number(char* job_number)
 {
-	char  number[10] = "0123456789" ;
-	char  number_char_buf[12] = {0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39,0xae,0xbb} ;
-	char id_buf[24]={0xEE,0xB1,0x10,0x00,0x01,0x00,0x08, \
+	char  number[36] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" ;
+	char  number_char_buf[38] = {0x30,0x31,0x32,0x33,0x34,0x35,0x36,0x37,0x38,0x39, \
+								 0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48,0x49,0x4A, \
+								 0x4B,0x4C,0x4D,0x4E,0x4F,0x50,0x51,0x52,0x53,0x54, \
+								 0x55,0x56,0x57,0x58,0x59,0x5A,0xae,0xbb} ;
+	char id_buf[23]={0xEE,0xB1,0x10,0x00,0x01,0x00,0x08, \
 		             0x35,0x32,0x31,0x30,0x30,0x30,0x30, \
-					 0x30,0x30,0x31,0x30,0x30,0x30,0xFF,0xFC,0xFF,0xFF} ; 
+					 0x30,0x30,0x31,0x30,0x30,0xFF,0xFC,0xFF,0xFF} ; 
 	char i = 0 , j = 0, cnt = 0;
     int  ret = 0 ;
 #if 0
@@ -994,9 +1066,9 @@ void show_job_number(char* job_number)
 	printf("----------------\n") ;
 	ret = write(uart_fd, id_buf, 17) ;      
 #endif
-	for(i=0;i<13;i++)
+	for(i=0;i<12;i++)
 	{
-		for(j=0;j<10;j++)
+		for(j=0;j<36;j++)
 		{
 			if(job_number[i] == number[j])
 			{
@@ -1006,8 +1078,19 @@ void show_job_number(char* job_number)
 			}
 		}
 	}
-	ret = write(uart_fd, id_buf, 24) ;      
+	ret = write(uart_fd, id_buf, 23) ;      
 
+}
+//无任务卡
+void NoTask(void)
+{
+	int ret = 0 ;
+	char id_buf[23]={0xEE,0xB1,0x10,0x00,0x01,0x00,0x08, \
+		             0x35,0x32,0x31,0x30,0x30,0x30,0x30, \
+					 0x30,0x30,0x31,0x30,0x30,0xFF,0xFC,0xFF,0xFF} ; 
+
+	memcpy(&id_buf[7], "   NO TASK  ", 12) ;
+	ret = write(uart_fd, id_buf, 23) ;      
 }
 void SystemRestarRecovery(void)
 {
